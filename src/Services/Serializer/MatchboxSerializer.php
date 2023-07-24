@@ -7,16 +7,15 @@ use App\Enum\ColorEnum;
 use App\Enum\ConverterFormatEnum;
 use App\Enum\SizeEnum;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Serializer\Normalizer\DenormalizerInterface;
 use Symfony\Component\Serializer\Normalizer\NormalizerInterface;
+use Error;
 
 class MatchboxSerializer implements NormalizerInterface, DenormalizerInterface
 {
-    protected EntityManagerInterface $entityManager;
-
-    public function __construct(EntityManagerInterface $entityManager)
+    public function __construct(readonly EntityManagerInterface $entityManager, readonly LoggerInterface $logger)
     {
-        $this->entityManager = $entityManager;
     }
 
     public function normalize(mixed $object, string $format = null, array $context = []): array
@@ -34,29 +33,39 @@ class MatchboxSerializer implements NormalizerInterface, DenormalizerInterface
         $matchboxes = [];
 
         if(is_array($data)){
-            foreach ($data as $matchboxArray){
-                $matchboxes[] = $this->denormalizeMatchbox($matchboxArray);
+            foreach ($data as $key => $matchboxArray){
+                if($matchbox = $this->denormalizeMatchbox($matchboxArray, $key)){
+                    $matchboxes[] = $matchbox;
+                }
             }
         } else {
-            $matchboxes[] = $this->denormalizeMatchbox($data);
+            if($matchbox = $this->denormalizeMatchbox($data)){
+                $matchboxes[] = $matchbox;
+            }
         }
 
         return $matchboxes;
     }
 
-    protected function denormalizeMatchbox(array $data): Matchbox
+    protected function denormalizeMatchbox(array $data, int $line = 0): ?Matchbox
     {
-        if(array_key_exists('id', $data)){
-            $matchbox = $this->entityManager->getRepository(Matchbox::class)->find($data['id']) ?: new Matchbox();
-        } else {
-            $matchbox = new Matchbox();
-        }
+        try{
+            if(array_key_exists('id', $data)){
+                $matchbox = $this->entityManager->getRepository(Matchbox::class)->find($data['id']) ?: new Matchbox();
+            } else {
+                $matchbox = new Matchbox();
+            }
 
-        return $matchbox
-            ->setColor(ColorEnum::tryFrom($data['color']))
-            ->setSize(SizeEnum::tryFrom($data['size']))
-            ->setMatchesCount($data['matchesCount'])
-        ;
+            return $matchbox
+                ->setColor(ColorEnum::tryFrom($data['color']))
+                ->setSize(SizeEnum::tryFrom($data['size']))
+                ->setMatchesCount($data['matchesCount'])
+                ;
+        } catch(Error $exception){
+            $this->logger->critical(sprintf('Error on line %s - %s', $line, $exception->getMessage()));
+
+            return null;
+        }
     }
 
     public function supportsDenormalization(mixed $data, string $type, string $format = null): bool
