@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+  app:
+    build: # Info to build the Docker image
+      context: docker/php # Specify where the Dockerfile is located (e.g. in the root directory of the project)
+      dockerfile: Dockerfile # Specify the name of the Dockerfile
+    container_name: match_box_app
+    volumes:
+      - ./:/var/www/project/ # Location of the project for php-fpm. Note this should be the same for NGINX.
+    networks:
+      - matchbox
+
+  db:
+    container_name: db
+    image: mysql:8.0.24
+    restart: always
+    ports:
+      - '3306:3306'
+    volumes:
+      - database:/var/lib/mysql:cached
+    environment:
+      - MYSQL_ROOT_PASSWORD=12345
+    networks:
+      - matchbox
+
+volumes:
+  database:
+
+networks:
+  matchbox:
